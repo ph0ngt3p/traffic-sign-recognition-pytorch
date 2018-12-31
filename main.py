@@ -76,7 +76,7 @@ val_logger = Logger(os.path.join(LOG_DIR, 'val'))
 # cudnn.benchmark = True
 def exp_lr_schedule(args, optimizer, epoch):
     init_lr = args.lr
-    lr_decay_epoch = 50
+    lr_decay_epoch = 5
     weight_decay = args.weight_decay
     lr = init_lr * (0.6 ** (min(epoch, 200) // lr_decay_epoch))
 
@@ -238,7 +238,7 @@ def predict(model, test_loader, convergence):
     print('Accuracy on test set: {:.6}'.format(test_correct/total))
 
 
-model = Net()
+model = Net2(num_classes=43)
 model.to(device)
 # model = params_initializer(model)
 if device == 'cuda':
@@ -248,7 +248,6 @@ if args.optim == 'sgd':
     optimizer = optim.SGD(model.parameters(), lr=args.lr, weight_decay=args.weight_decay, momentum=0.9)
 elif args.optim == 'adam':
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-
 
 if args.train:
     train_set = MyTrainDataset(TRAINVAL_PATH, root_dir='./data', train=True, transform=transform_train)
@@ -283,7 +282,21 @@ if args.inspect:
     epoch = checkpoint['epoch']
     print('Model used to predict has best acc {:3} on validate set at epoch {}'.format(acc, epoch))
 
-# if args.resume:
-#     print('==> Resume model from last checkpoint ...')
-#     assert os.path.isdir('./checkpoint'), 'Error: no checkpoint directory found!'
-#     checkpoint = torch.load
+if args.resume:
+    train_set = MyTrainDataset(TRAINVAL_PATH, root_dir='./data', train=True, transform=transform_train)
+    val_set = MyTrainDataset(TRAINVAL_PATH, root_dir='./data', train=False, transform=transform_test)
+    print('==> Resume model from last checkpoint ...')
+    assert os.path.isdir('./checkpoint'), 'Error: no checkpoint directory found!'
+    checkpoint = torch.load('./checkpoint/convergence.t7')
+    model.load_state_dict(checkpoint['model'])
+    loss = checkpoint['loss']
+    epoch = checkpoint['epoch']
+    print('Model used to predict converges at epoch {} and loss {:.3}'.format(epoch, loss))
+
+    train_loader = utilsData.DataLoader(dataset=train_set, batch_size=args.batch_size, sampler=None, shuffle=True,
+                                        batch_sampler=None)
+    val_loader = utilsData.DataLoader(dataset=val_set, batch_size=args.batch_size, sampler=None, shuffle=False,
+                                      batch_sampler=None)
+
+    for epoch in range(epoch, args.interval):
+        train_validate(epoch, optimizer, model, criterion, train_loader, val_loader)

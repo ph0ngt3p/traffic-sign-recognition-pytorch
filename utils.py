@@ -8,19 +8,41 @@ import torch.nn.init as init
 from torch.utils.data import DataLoader, Dataset
 import torchvision.transforms as transforms
 import tables
+import numpy as np
+from augmentations import rand_similarity_trans
+
+import cv2
+import matplotlib.pyplot as plt
 
 
 class MyTrainDataset(Dataset):
-    def __init__(self, hdf5_file, root_dir, train, transform=None):
+    def __init__(self, hdf5_file, root_dir, train, aug_multiplier=5, transform=None):
         if os.path.isfile(hdf5_file):
             self.hdf5_file = tables.open_file(hdf5_file, mode='r')
             self.train = train
             if train:
-                self.train_imgs = self.hdf5_file.root.train_imgs
-                self.train_labels = self.hdf5_file.root.train_labels
+                # Generate additional data
+                print('Generating {} times more additional data for train set...'.format(aug_multiplier))
+                orig_train_labels = self.hdf5_file.root.train_labels
+                orig_train_imgs = self.hdf5_file.root.train_imgs
+                # print(orig_imgs.shape)
+                aug_train_imgs = np.vstack([rand_similarity_trans(img, aug_multiplier) for img in orig_train_imgs])
+                # print(aug_imgs.shape)
+                aug_train_labels = np.repeat(orig_train_labels, aug_multiplier)
+
+                # append the generated data to the training data
+                self.train_imgs = np.append(orig_train_imgs, aug_train_imgs, axis=0)
+                self.train_labels = np.append(orig_train_labels, aug_train_labels, axis=0)
             else:
-                self.val_imgs = self.hdf5_file.root.val_imgs
-                self.val_labels = self.hdf5_file.root.val_labels
+                print('Generating {} times more additional data for validation set...'.format(aug_multiplier))
+                orig_val_labels = self.hdf5_file.root.val_labels
+                orig_val_imgs = self.hdf5_file.root.val_imgs
+                aug_val_imgs = np.vstack([rand_similarity_trans(img, aug_multiplier) for img in orig_val_imgs])
+                aug_val_labels = np.repeat(orig_val_labels, aug_multiplier)
+
+                # append the generated data to the training data
+                self.val_imgs = np.append(orig_val_imgs, aug_val_imgs, axis=0)
+                self.val_labels = np.append(orig_val_labels, aug_val_labels, axis=0)
             self.root_dir = root_dir
             self.transform = transform
         else:
@@ -76,3 +98,18 @@ def gen_outputline(label, preds):
     idx = str(label)
     return idx + ',' + str(preds)[1:-1].replace(',', '') + '\n'
 
+
+# def test_aug_train():
+#     dset = MyTrainDataset('data/train_val_data.hdf5', root_dir='./data', train=True)
+#     print(len(dset))
+#     print(len(dset.train_labels))
+#     print(dset.train_imgs.shape)
+#
+#     img = dset.train_imgs[-555, :, :, 0]
+#     print(dset.train_labels[-555])
+#     plt.subplot(1, 2, 2)
+#     plt.imshow(img, cmap='gray')
+#     plt.show()
+#
+#
+# test_aug_train()
